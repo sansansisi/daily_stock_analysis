@@ -37,7 +37,7 @@ describe('alphasiftApi', () => {
       data: {
         installed: true,
         already_installed: true,
-        install_spec: 'git+https://github.com/ZhuLinsen/alphasift.git@2c76b2b6074ae3bae01d52e5e830a4af3e3246b2',
+        install_spec_is_default: true,
       },
     });
 
@@ -60,7 +60,7 @@ describe('alphasiftApi', () => {
       data: {
         installed: true,
         already_installed: true,
-        install_spec: 'git+https://github.com/ZhuLinsen/alphasift.git@2c76b2b6074ae3bae01d52e5e830a4af3e3246b2',
+        install_spec_is_default: true,
       },
     });
 

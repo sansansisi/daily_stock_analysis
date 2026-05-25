@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SidebarNav } from '../SidebarNav';
 
 const mockLogout = vi.fn().mockResolvedValue(undefined);
-const mockGetAlphaSiftStatus = vi.fn().mockResolvedValue({ enabled: false, available: false, installSpec: 'alphasift' });
+const mockGetAlphaSiftStatus = vi.fn().mockResolvedValue({ enabled: false, available: false, installSpecIsDefault: false });
 const mockThemeToggle = vi.fn(({ collapsed }: { collapsed?: boolean }) => (
   <button type="button">{collapsed ? '切换主题(折叠)' : '切换主题'}</button>
 ));
@@ -35,7 +35,7 @@ vi.mock('../../theme/ThemeToggle', () => ({
 
 describe('SidebarNav', () => {
   it('hides the screening navigation item while AlphaSift is disabled', () => {
-    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: false, available: false, installSpec: 'alphasift' });
+    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: false, available: false, installSpecIsDefault: false });
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -47,7 +47,7 @@ describe('SidebarNav', () => {
   });
 
   it('shows the screening navigation item when AlphaSift is enabled', async () => {
-    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: true, available: false, installSpec: 'alphasift' });
+    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: true, available: false, installSpecIsDefault: false });
 
     render(
       <MemoryRouter initialEntries={['/']}>

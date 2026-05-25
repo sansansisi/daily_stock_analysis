@@ -93,10 +93,10 @@ const StockScreeningPage: React.FC = () => {
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedStrategy = useMemo(
-    () => STRATEGIES.find((item) => item.id === strategy) ?? STRATEGIES[0],
-    [strategy],
-  );
+  const selectedStrategy = useMemo(() => STRATEGIES.find((item) => item.id === strategy), [strategy]);
+  const selectedStrategyTitle = selectedStrategy?.title ?? '自定义策略';
+  const selectedStrategyTag = selectedStrategy?.tag ?? '自定义';
+  const displayedStrategy = selectedStrategy ? selectedStrategyTitle : `自定义策略（${strategy}）`;
 
   useEffect(() => {
     alphasiftApi
@@ -185,7 +185,7 @@ const StockScreeningPage: React.FC = () => {
             <p className="mt-1 text-xs text-secondary-text">策略会作为参数直接传给 AlphaSift，可按需切换或手动输入。</p>
           </div>
           <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 text-xs font-semibold text-cyan">
-            {selectedStrategy.tag}
+            {selectedStrategyTag}
           </span>
         </div>
 
@@ -283,7 +283,7 @@ const StockScreeningPage: React.FC = () => {
                 {candidates.length > 0 ? '选股完成' : enabled ? '等待运行' : '等待开启'}
               </h2>
               <p className="mt-1 text-xs text-secondary-text">
-                当前策略：{selectedStrategy.title} · {MARKETS.find((item) => item.id === market)?.label}
+                当前策略：{displayedStrategy} · {MARKETS.find((item) => item.id === market)?.label}
               </p>
             </div>
           </div>

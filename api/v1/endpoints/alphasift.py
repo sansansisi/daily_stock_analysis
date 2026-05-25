@@ -42,8 +42,12 @@ def alphasift_install(config: Config = Depends(get_config_dep)) -> Dict[str, Any
 
 
 def _install_alphasift(config: Config) -> Dict[str, Any]:
+    install_spec_is_default = _is_default_alphasift_install_spec(config.alphasift_install_spec)
     if _is_alphasift_available():
-        return {"installed": True, "already_installed": True, "install_spec": config.alphasift_install_spec}
+        return _build_install_response(
+            already_installed=True,
+            install_spec_is_default=install_spec_is_default,
+        )
 
     install_spec = _validate_install_spec(config.alphasift_install_spec)
 
@@ -80,7 +84,10 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
             detail={"error": "alphasift_unavailable", "message": "AlphaSift 安装完成，但当前进程仍无法导入 alphasift。请重启后端后重试。"},
         )
 
-    return {"installed": True, "already_installed": False, "install_spec": install_spec}
+    return _build_install_response(
+        already_installed=False,
+        install_spec_is_default=_is_default_alphasift_install_spec(install_spec),
+    )
 
 
 def _validate_install_spec(raw_install_spec: str) -> str:
@@ -204,6 +211,14 @@ def _to_plain(value: Any) -> Any:
     if isinstance(value, list):
         return [_to_plain(item) for item in value]
     return value
+
+
+def _build_install_response(already_installed: bool, install_spec_is_default: bool) -> Dict[str, Any]:
+    return {
+        "installed": True,
+        "already_installed": already_installed,
+        "install_spec_is_default": install_spec_is_default,
+    }
 
 
 def _is_default_alphasift_install_spec(install_spec: str) -> bool:

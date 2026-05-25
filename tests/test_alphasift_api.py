@@ -129,6 +129,13 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         completed = SimpleNamespace(returncode=0, stdout="installed", stderr="")
 
         with (
+            patch(
+                "api.v1.endpoints.alphasift.ALLOWED_ALPHASIFT_INSTALL_SPECS",
+                new=frozenset({
+                    *alphasift_endpoint.ALLOWED_ALPHASIFT_INSTALL_SPECS,
+                    config.alphasift_install_spec,
+                }),
+            ),
             patch("api.v1.endpoints.alphasift.subprocess.run", return_value=completed) as run_mock,
             patch(
                 "api.v1.endpoints.alphasift._import_alphasift",
@@ -139,8 +146,38 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
 
         self.assertEqual(payload["installed"], True)
         self.assertEqual(payload["already_installed"], False)
+        self.assertEqual(payload["install_spec_is_default"], True)
+        self.assertNotIn("install_spec", payload)
         run_mock.assert_called_once()
         self.assertIn(DEFAULT_ALPHASIFT_TEST_SPEC, run_mock.call_args.args[0])
+
+    def test_install_marks_custom_spec_as_non_default_without_exposing_spec(self) -> None:
+        config = self._config(enabled=True, install_spec="git+https://example.com/private/alphasift.git")
+        fake_module = SimpleNamespace(screen=MagicMock())
+        completed = SimpleNamespace(returncode=0, stdout="installed", stderr="")
+
+        with (
+            patch(
+                "api.v1.endpoints.alphasift.ALLOWED_ALPHASIFT_INSTALL_SPECS",
+                new=frozenset({
+                    *alphasift_endpoint.ALLOWED_ALPHASIFT_INSTALL_SPECS,
+                    config.alphasift_install_spec,
+                }),
+            ),
+            patch("api.v1.endpoints.alphasift.subprocess.run", return_value=completed) as run_mock,
+            patch(
+                "api.v1.endpoints.alphasift._import_alphasift",
+                side_effect=[_alphasift_unavailable(), fake_module],
+            ),
+        ):
+            payload = alphasift_endpoint.alphasift_install(config=config)
+
+        self.assertEqual(payload["installed"], True)
+        self.assertEqual(payload["already_installed"], False)
+        self.assertEqual(payload["install_spec_is_default"], False)
+        self.assertNotIn("install_spec", payload)
+        run_mock.assert_called_once()
+        self.assertIn(config.alphasift_install_spec, run_mock.call_args.args[0])
 
     def test_screen_calls_alphasift_package_when_enabled(self) -> None:
         config = self._config(enabled=True)

@@ -428,7 +428,7 @@ describe('SettingsPage', () => {
     alphasiftInstall.mockResolvedValue({
       installed: true,
       alreadyInstalled: true,
-      installSpec: 'git+https://github.com/ZhuLinsen/alphasift.git@2c76b2b6074ae3bae01d52e5e830a4af3e3246b2',
+      installSpecIsDefault: true,
     });
     desktopGetUpdateState.mockResolvedValue({
       status: 'idle',

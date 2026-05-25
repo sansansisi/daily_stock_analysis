@@ -5,13 +5,13 @@ import { toCamelCase } from './utils';
 export type AlphaSiftStatus = {
   enabled: boolean;
   available: boolean;
-  installSpec: string;
+  installSpecIsDefault: boolean;
 };
 
 export type AlphaSiftInstallResponse = {
   installed: boolean;
   alreadyInstalled: boolean;
-  installSpec: string;
+  installSpecIsDefault: boolean;
 };
 
 export type AlphaSiftCandidate = {

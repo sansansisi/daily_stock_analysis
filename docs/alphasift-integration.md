@@ -33,6 +33,17 @@ DSA 调用的 AlphaSift 接口固定为：
 alphasift.screen(strategy, market=market, max_output=max_results, use_llm=False)
 ```
 
+## 契约与兼容验证
+
+后端 `/api/v1/alphasift/status` 与 `/api/v1/alphasift/install` 只返回非敏感字段，不会回传原始 `ALPHASIFT_INSTALL_SPEC`，并在响应中给出 `install_spec_is_default` 是否为默认可信来源。
+在自动化测试中通过 `tests/test_alphasift_api.py` 固化以下约束：
+
+- 状态接口不返回 `install_spec` 明文。
+- 安装接口返回 `installed`/`already_installed`/`install_spec_is_default`，不返回 `install_spec` 明文。
+- `alphasift.screen` 必须使用固定签名 `screen(strategy, market=..., max_output=..., use_llm=False)` 调用。
+
+当前自动化环境不执行联网安装与运行时真库验收；若需线上复核，请在可访问目标提交的同一 Python 环境手动完成 `pip install` 并访问 `/api/v1/alphasift/screen`，确认上述签名仍可成功执行。
+
 若 AlphaSift 接口不兼容或自动安装失败，可将 `ALPHASIFT_ENABLED=false` 回退为关闭状态；已手动安装的包由运行环境自行管理。
 
 ## 接口
