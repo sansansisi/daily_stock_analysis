@@ -180,7 +180,7 @@ To get started quickly, you need at minimum:
 
 Default schedule: Every weekday at **18:00 (Beijing Time)** is executed by the default workflow cron; when repository-level `SCHEDULE_TIME` is not set, the trigger remains the workflow default.
 `SCHEDULE_TIME` currently only affects local built-in scheduling via `python main.py --schedule` and does not change GitHub Actions trigger timing. Change the workflow `cron` to adjust Actions execution time.
-> This section is a docs-only boundary clarification for Issue #1497; this PR only updates documentation and does not include runtime workflow trigger changes.
+> This section is an Issue #1497 docs-only boundary clarification (reference-only, no runtime delivery), and does not include workflow-trigger implementation changes.
 
 ---
 
