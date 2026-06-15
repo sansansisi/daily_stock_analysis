@@ -37,7 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - [新功能] 个股分析历史成功保存后会从最终报告 best-effort 提取 `DecisionSignal` 决策信号，复用现有信号去重、计划质量计算和脱敏契约。
 - [改进] 问股页移动端策略选择改为默认收起的按钮入口，展开后仍可多选策略并在发送后自动收起，减少对对话内容的遮挡。
-- [文档] #1646 移动端策略选择的 UI 变更仅为交互层改造，不涉及运行时模型、Provider、Base URL 或配置迁移；如截图不可获取，替代可视证据见 `apps/dsa-web/src/pages/__tests__/ChatPage.test.tsx`（默认收起与发送后回收策略面板用例）。
 
 
 ## [3.22.0] - 2026-06-13
