@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import socket
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -30,6 +31,7 @@ _PRIVATE_HOSTNAMES = {"localhost", "localhost.localdomain"}
 _MAX_FEED_BYTES = 2 * 1024 * 1024
 _MAX_REDIRECTS = 5
 _REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+_DNS_GUARD_LOCK = threading.RLock()
 
 
 class IntelligenceServiceError(ValueError):
@@ -195,10 +197,11 @@ class IntelligenceService:
     def _fetch_feed_entries(self, fields: Dict[str, Any], *, limit: int) -> List[FeedEntry]:
         self._validate_url(fields["url"])
         response = self._get_feed_response(fields["url"])
-        response.raise_for_status()
-        content = response.content[: _MAX_FEED_BYTES + 1]
-        if len(content) > _MAX_FEED_BYTES:
-            raise IntelligenceServiceError("feed response is too large")
+        try:
+            response.raise_for_status()
+            content = self._read_limited_response(response)
+        finally:
+            self._close_response(response)
         return self._parse_feed(content, source_name=fields["name"], limit=limit)
 
     def _get_feed_response(self, raw_url: str) -> requests.Response:
@@ -207,24 +210,80 @@ class IntelligenceService:
         headers = {"User-Agent": "daily-stock-analysis-intel/1.0"}
         for redirect_index in range(_MAX_REDIRECTS + 1):
             self._validate_url(current_url)
-            response = requests.get(
+            response = self._get_with_validated_dns(
                 current_url,
                 timeout=timeout,
                 headers=headers,
                 allow_redirects=False,
+                stream=True,
             )
             status_code = self._response_status_code(response)
             if status_code not in _REDIRECT_STATUS_CODES:
-                self._validate_url(response.url or current_url)
+                try:
+                    self._validate_url(response.url or current_url)
+                except Exception:
+                    self._close_response(response)
+                    raise
                 return response
             if redirect_index >= _MAX_REDIRECTS:
+                self._close_response(response)
                 raise IntelligenceServiceError("too many redirects while fetching source url")
             location = response.headers.get("Location") if response.headers else None
+            self._close_response(response)
             if not location:
                 raise IntelligenceServiceError("redirect response is missing Location header")
             current_url = urljoin(current_url, location.strip())
             self._validate_url(current_url)
         raise IntelligenceServiceError("too many redirects while fetching source url")
+
+    def _get_with_validated_dns(self, raw_url: str, **kwargs: Any) -> requests.Response:
+        parsed = urlparse(raw_url)
+        target_hostname = self._normalize_hostname(parsed.hostname)
+        original_getaddrinfo = socket.getaddrinfo
+
+        def guarded_getaddrinfo(host: Any, port: Any, *args: Any, **inner_kwargs: Any) -> Any:
+            addrinfos = original_getaddrinfo(host, port, *args, **inner_kwargs)
+            if self._normalize_hostname(host) == target_hostname:
+                self._validate_addrinfos(addrinfos)
+            return addrinfos
+
+        with _DNS_GUARD_LOCK:
+            socket.getaddrinfo = guarded_getaddrinfo
+            try:
+                return requests.get(raw_url, **kwargs)
+            finally:
+                socket.getaddrinfo = original_getaddrinfo
+
+    @staticmethod
+    def _read_limited_response(response: requests.Response) -> bytes:
+        chunks: List[bytes] = []
+        total = 0
+        for chunk in response.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            if isinstance(chunk, str):
+                chunk = chunk.encode("utf-8")
+            total += len(chunk)
+            if total > _MAX_FEED_BYTES:
+                raise IntelligenceServiceError("feed response is too large")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    @staticmethod
+    def _close_response(response: requests.Response) -> None:
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+
+    @staticmethod
+    def _normalize_hostname(hostname: Any) -> str:
+        if isinstance(hostname, bytes):
+            hostname = hostname.decode("ascii", errors="ignore")
+        normalized = str(hostname or "").strip().lower().rstrip(".")
+        try:
+            return normalized.encode("idna").decode("ascii")
+        except UnicodeError:
+            return normalized
 
     @staticmethod
     def _response_status_code(response: requests.Response) -> int:
@@ -241,6 +300,10 @@ class IntelligenceService:
             raise IntelligenceServiceError("source url host could not be resolved") from exc
         if not addrinfos:
             raise IntelligenceServiceError("source url host could not be resolved")
+        IntelligenceService._validate_addrinfos(addrinfos)
+
+    @staticmethod
+    def _validate_addrinfos(addrinfos: Any) -> None:
         for addrinfo in addrinfos:
             address = addrinfo[4][0]
             try:

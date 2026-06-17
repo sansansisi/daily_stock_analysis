@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 from src.config import Config
 from src.repositories.intelligence_repo import IntelligenceRepository
-from src.services.intelligence_service import IntelligenceService, IntelligenceServiceError
+from src.services.intelligence_service import IntelligenceService, IntelligenceServiceError, _MAX_FEED_BYTES
 from src.storage import DatabaseManager, IntelligenceItem
 
 RSS_FIXTURE = b'<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>\n<item><title>Policy support lifts AI supply chain</title><link>https://news.example.com/a</link><description>Market-level catalyst with evidence link.</description><pubDate>Wed, 17 Jun 2026 08:00:00 GMT</pubDate></item>\n<item><title>Second item</title><link>https://news.example.com/b</link><description>Second summary.</description></item>\n</channel></rss>'
@@ -40,9 +40,10 @@ class IntelligenceServiceTestCase(unittest.TestCase):
         response = Mock()
         response.status_code = 200
         response.headers = {}
-        response.content = RSS_FIXTURE
+        response.iter_content.return_value = [RSS_FIXTURE]
         response.url = "https://feeds.example.com/rss.xml"
         response.raise_for_status.return_value = None
+        response.close.return_value = None
         return response
 
     def _public_dns(self):
@@ -67,6 +68,28 @@ class IntelligenceServiceTestCase(unittest.TestCase):
         self.assertEqual(items["total"], 2)
         self.assertEqual(items["items"][0]["scope_type"], "market")
         self.assertTrue(items["items"][0]["url"].startswith("https://news.example.com/"))
+
+    def test_same_url_from_different_source_scope_preserves_both_items(self) -> None:
+        with self._public_dns():
+            cn_source = self.service.create_source({
+                "name": "cn-feed", "url": "https://feeds.example.com/rss.xml",
+                "source_type": "rss", "scope_type": "market", "market": "cn",
+            })
+            us_source = self.service.create_source({
+                "name": "us-feed", "url": "https://feeds.example.com/rss.xml",
+                "source_type": "rss", "scope_type": "market", "market": "us",
+            })
+        with self._public_dns(), patch("src.services.intelligence_service.requests.get", return_value=self._mock_response()):
+            cn_result = self.service.fetch_source(cn_source["id"])
+            us_result = self.service.fetch_source(us_source["id"])
+        self.assertEqual(cn_result["saved_count"], 2)
+        self.assertEqual(us_result["saved_count"], 2)
+        cn_items = self.service.list_items(scope_type="market", market="cn")
+        us_items = self.service.list_items(scope_type="market", market="us")
+        self.assertEqual(cn_items["total"], 2)
+        self.assertEqual(us_items["total"], 2)
+        self.assertEqual({item["source_name"] for item in cn_items["items"]}, {"cn-feed"})
+        self.assertEqual({item["source_name"] for item in us_items["items"]}, {"us-feed"})
 
     def test_private_network_url_is_rejected(self) -> None:
         with self.assertRaises(IntelligenceServiceError):
@@ -96,6 +119,53 @@ class IntelligenceServiceTestCase(unittest.TestCase):
                 self.service.fetch_source(source["id"])
         self.assertEqual(mock_get.call_count, 1)
         self.assertFalse(mock_get.call_args.kwargs["allow_redirects"])
+
+    def test_fetch_validates_dns_resolution_used_by_request(self) -> None:
+        public_dns = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+        private_dns = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 0))]
+
+        def fake_get(url, **kwargs):
+            socket.getaddrinfo("feeds.example.com", 443, type=socket.SOCK_STREAM)
+            return self._mock_response()
+
+        with patch("src.services.intelligence_service.socket.getaddrinfo", side_effect=[public_dns, private_dns]):
+            with patch("src.services.intelligence_service.requests.get", side_effect=fake_get) as mock_get:
+                with self.assertRaises(IntelligenceServiceError):
+                    self.service._get_feed_response("https://feeds.example.com/rss.xml")
+        self.assertEqual(mock_get.call_count, 1)
+
+    def test_fetch_streams_response_before_enforcing_byte_cap(self) -> None:
+        with self._public_dns():
+            source = self.service.create_source({
+                "name": "large-feed", "url": "https://feeds.example.com/rss.xml",
+                "scope_type": "market",
+            })
+
+        class LargeResponse:
+            status_code = 200
+            headers: dict = {}
+            url = "https://feeds.example.com/rss.xml"
+
+            @property
+            def content(self):
+                raise AssertionError("content should not be read")
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=1):
+                yield b"x" * (_MAX_FEED_BYTES + 1)
+
+            def close(self):
+                self.closed = True
+
+        response = LargeResponse()
+        response.closed = False
+        with self._public_dns(), patch("src.services.intelligence_service.requests.get", return_value=response) as mock_get:
+            with self.assertRaisesRegex(IntelligenceServiceError, "feed response is too large"):
+                self.service.fetch_source(source["id"])
+        self.assertTrue(mock_get.call_args.kwargs["stream"])
+        self.assertTrue(response.closed)
 
     def test_fetch_enabled_sources_is_fail_open(self) -> None:
         with self._public_dns():

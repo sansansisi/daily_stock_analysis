@@ -37,9 +37,10 @@ class IntelligenceApiTestCase(unittest.TestCase):
         response = Mock()
         response.status_code = 200
         response.headers = {}
-        response.content = RSS_FIXTURE
+        response.iter_content.return_value = [RSS_FIXTURE]
         response.url = "https://feeds.example.com/rss.xml"
         response.raise_for_status.return_value = None
+        response.close.return_value = None
         return response
 
     def _public_dns(self):

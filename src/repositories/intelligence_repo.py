@@ -96,17 +96,31 @@ class IntelligenceRepository:
                 title = (fields.get("title") or "").strip()
                 if not url or not title:
                     continue
+                scope_value = fields.get("scope_value")
+                source_id = fields.get("source_id")
+                conditions = [
+                    IntelligenceItem.url == url,
+                    IntelligenceItem.source_type == (fields.get("source_type") or "rss"),
+                    IntelligenceItem.scope_type == (fields.get("scope_type") or "market"),
+                    IntelligenceItem.market == (fields.get("market") or "cn"),
+                ]
+                if source_id is None:
+                    conditions.append(IntelligenceItem.source_id.is_(None))
+                    conditions.append(IntelligenceItem.source_name == fields.get("source_name"))
+                else:
+                    conditions.append(IntelligenceItem.source_id == source_id)
+                if scope_value is None:
+                    conditions.append(IntelligenceItem.scope_value.is_(None))
+                else:
+                    conditions.append(IntelligenceItem.scope_value == scope_value)
                 existing = session.execute(
-                    select(IntelligenceItem).where(IntelligenceItem.url == url).limit(1)
+                    select(IntelligenceItem).where(and_(*conditions)).limit(1)
                 ).scalar_one_or_none()
                 if existing is not None:
                     existing.summary = fields.get("summary") or existing.summary
                     existing.source = fields.get("source") or existing.source
                     existing.published_at = fields.get("published_at") or existing.published_at
                     existing.fetched_at = fields.get("fetched_at") or datetime.now()
-                    existing.scope_type = fields.get("scope_type") or existing.scope_type
-                    existing.scope_value = fields.get("scope_value") or existing.scope_value
-                    existing.market = fields.get("market") or existing.market
                     existing.raw_payload = fields.get("raw_payload") or existing.raw_payload
                     continue
                 try:

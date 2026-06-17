@@ -246,7 +246,7 @@ class IntelligenceItem(Base):
     source_type = Column(String(32), nullable=False, default='rss', index=True)
     title = Column(String(300), nullable=False)
     summary = Column(Text)
-    url = Column(String(1000), nullable=False, unique=True)
+    url = Column(String(1000), nullable=False, index=True)
     source = Column(String(100))
     published_at = Column(DateTime, index=True)
     fetched_at = Column(DateTime, default=datetime.now, index=True)
@@ -256,6 +256,14 @@ class IntelligenceItem(Base):
     raw_payload = Column(Text)
 
     __table_args__ = (
+        UniqueConstraint(
+            'source_id',
+            'url',
+            'scope_type',
+            'scope_value',
+            'market',
+            name='uix_intel_item_source_scope_url',
+        ),
         Index('ix_intel_item_scope_time', 'scope_type', 'scope_value', 'market', 'published_at'),
         Index('ix_intel_item_fetch_time', 'fetched_at'),
     )
