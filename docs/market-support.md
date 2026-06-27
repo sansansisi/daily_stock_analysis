@@ -21,11 +21,14 @@
 
 兼容性与回退说明（针对结构化检测命中项）：
 
-- `#1815` 本次仅新增 `yfinance` 报价/基本面上下文中的可选字段元数据（如 `market`、`currency`、`data_quality`、`missing_fields`、`provider`），未改动 LLM provider/model/base URL、配置 Schema、运行时环境变量、数据库字段、存量缓存序列化或消息协议版本。
-- 外部 API 边界仍仅限既有 `yfinance` fetch 路径（含 `Ticker`/`history`/`fast_info`）与既有兜底逻辑；没有新增或迁移 API 网关/host，`YFINANCE_PRIORITY` 是唯一受影响的可见参数。
-- 兼容性验证依据：行情/基本面上下文在 `data_provider/base.py` 与 `realtime_types.py` 中按现有 `getattr`/可选字段约定向下游透传，不强制读写新增字段；无配置迁移脚本，未观察到 provider/model/base URL fallback 路径变更。
+- `#1815` 本次仅新增 `yfinance` 报价/基本面上下文中的可选字段元数据（`market`、`currency`、`data_quality`、`missing_fields`、`provider`），不改动 LLM `provider`、`model`、`base_url`、配置 Schema、运行时迁移分支、数据库 schema 与消息协议版本；外部 provider/API 仍沿用既有链路与 fallback。
+- 兼容/回退证据：
+  - 官方约定参考：[LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible)、[OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat)；
+  - 运行时配置不清空路径：`tests/test_system_config_service.py::test_runtime_env_fallback_does_not_persist_llm_fields_on_save`、`tests/test_system_config_service.py::test_runtime_env_fallback_does_not_override_saved_provider_and_base_url_settings`、`tests/test_system_config_service.py::test_import_desktop_env_merges_keys_without_deleting_unspecified_values`、`tests/test_config_env_compat.py`；
+  - 清理行为与可见提示：`tests/test_system_config_service.py::test_update_alphasift_enable_does_not_rewrite_llm_fields`、`tests/test_system_config_service.py::test_update_preserves_masked_secret`；
+  - 实际回退路径：恢复 `.env` 备份中的 provider/model/base_url 值，或回退提交。
+- 运行时配置语义说明：`MARKET_REVIEW_REGION`、`MARKET_REVIEW_COLOR_SCHEME` 与 Web 市场选择入口只影响大盘复盘输入/展示；不触发 provider/model/base_url 重写、运行时配置清理、路由迁移分支。
 - 回退方式：若新增元数据字段在某端产生兼容问题，可先忽略这些字段并按既有市场判定+行情展示链路运行；必要时回滚本次提交或通过移除 `jp/kr` `MarketSymbol` 及路由扩展恢复旧行为。
-- 运行时配置语义说明：`MARKET_REVIEW_REGION`、`MARKET_REVIEW_COLOR_SCHEME` 和 Web 市场选择入口只影响大盘复盘输入与展示；不会触发 provider/model/base URL 重写、运行时配置清理（cleanup）或旧链路迁移。
 
 不承诺项：
 
